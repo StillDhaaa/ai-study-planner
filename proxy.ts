@@ -6,14 +6,15 @@ export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // Fast-path: jika tidak ada cookie Supabase sama sekali, langsung redirect tanpa panggil API
-  const hasCookies = request.cookies.getAll().some((c) =>
-    c.name.startsWith("sb-"),
-  );
+  const hasCookies = request.cookies
+    .getAll()
+    .some((c) => c.name.startsWith("sb-"));
 
   if (!hasCookies && pathname.startsWith("/belajar")) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
-    loginUrl.searchParams.set("error", "Silahkan login terlebih dahulu.");
+    loginUrl.search = "";
+    loginUrl.searchParams.set("error", "unauthorized");
     return NextResponse.redirect(loginUrl);
   }
 
@@ -47,7 +48,8 @@ export async function proxy(request: NextRequest) {
   if (!user && pathname.startsWith("/belajar")) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
-    loginUrl.searchParams.set("error", "Silahkan login terlebih dahulu.");
+    loginUrl.search = "";
+    loginUrl.searchParams.set("error", "unauthorized");
     return NextResponse.redirect(loginUrl);
   }
 
@@ -55,6 +57,7 @@ export async function proxy(request: NextRequest) {
   if (user && pathname === "/login") {
     const belajarUrl = request.nextUrl.clone();
     belajarUrl.pathname = "/belajar";
+    belajarUrl.search = "";
     return NextResponse.redirect(belajarUrl);
   }
 

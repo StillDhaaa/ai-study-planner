@@ -24,15 +24,51 @@ function LoginUI({ user }: LoginProps) {
 
   const supabase = getSupabaseBrowserClient();
   const router = useRouter();
+
+  async function ensureOrientationSchedule(userId: string) {
+    const { data: existingSchedules, error: fetchError } = await supabase
+      .from("user_schedules")
+      .select("id")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (fetchError) throw new Error(fetchError.message);
+    if (existingSchedules && existingSchedules.length > 0) return;
+
+    const todayDate = new Date().toISOString().split("T")[0];
+    const initialSchedule = {
+      user_id: userId,
+      tujuan_belajar: "Pengenalan",
+      tanggal_mulai: todayDate,
+      jadwal_data: {
+        tanggal_mulai: todayDate,
+        jadwal_harian: {
+          hari_1: [
+            {
+              waktu: "Sekarang",
+              kegiatan: "Selamat datang! Ketik target belajarmu di chat.",
+              tipe: "fokus",
+            },
+          ],
+        },
+      },
+    };
+
+    const { error: insertError } = await supabase
+      .from("user_schedules")
+      .insert([initialSchedule] as unknown as never);
+    if (insertError) throw new Error(insertError.message);
+  }
   const searchParams = useSearchParams();
 
   // Tampilkan pesan error jika ada parameter error dari proxy/middleware
   useEffect(() => {
     const errorMsg = searchParams?.get("error");
-    if (errorMsg) {
-      toast.error(errorMsg, { id: "auth-error-toast" });
+    if (errorMsg === "unauthorized") {
+      toast.error("Harap login terlebih dahulu", { id: "auth-error-toast" });
       // Opsional: Hapus query parameter setelah ditampilkan agar tidak muncul lagi saat refresh
-      router.replace("/login", undefined);
+      router.replace("/login");
     }
   }, [searchParams, router]);
 
@@ -63,31 +99,9 @@ function LoginUI({ user }: LoginProps) {
           // Set displayname cookie dengan max-age 1 hari (86400 detik)
           document.cookie = `displayname=${encodeURIComponent(displayNameToSave)}; path=/; max-age=86400`;
 
-          // Create initial orientation schedule di Supabase
+          // Create initial orientation schedule di Supabase jika belum ada
           try {
-            const todayDate = new Date().toISOString().split("T")[0];
-            const initialSchedule = {
-              user_id: data.user?.id,
-              tujuan_belajar: "Pengenalan",
-              tanggal_mulai: todayDate,
-              jadwal_data: {
-                tanggal_mulai: todayDate,
-                jadwal_harian: {
-                  hari_1: [
-                    {
-                      waktu: "Sekarang",
-                      kegiatan:
-                        "Selamat datang! Ketik target belajarmu di chat.",
-                      tipe: "fokus",
-                    },
-                  ],
-                },
-              },
-            };
-
-            await supabase
-              .from("user_schedules")
-              .insert([initialSchedule] as unknown as never);
+            if (data.user?.id) await ensureOrientationSchedule(data.user.id);
           } catch (scheduleError) {
             console.warn(
               "Gagal membuat jadwal orientasi, user tetap lanjut:",
@@ -95,9 +109,7 @@ function LoginUI({ user }: LoginProps) {
             );
           }
 
-          setTimeout(() => {
-            router.push("/belajar");
-          }, 500);
+          router.replace("/belajar");
           return `Akun berhasil dibuat, selamat datang ${displayNameToSave}!`;
         }
       } else {
@@ -114,20 +126,33 @@ function LoginUI({ user }: LoginProps) {
           // Set displayname cookie dengan max-age 1 hari (86400 detik)
           document.cookie = `displayname=${encodeURIComponent(displayNameToSave)}; path=/; max-age=86400`;
 
-          setTimeout(() => {
-            router.push("/belajar");
-          }, 500);
+          try {
+            if (data.user?.id) await ensureOrientationSchedule(data.user.id);
+          } catch (scheduleError) {
+            console.warn(
+              "Gagal memastikan jadwal orientasi, user tetap lanjut:",
+              scheduleError,
+            );
+          }
+
+          router.replace("/belajar");
           return `Selamat datang kembali ${displayNameToSave}!`;
         }
       }
     };
 
-    toast.promise(login(), {
-      loading: "Loading...",
-      success: (text) => text,
-      error: (error) => error.message,
-    });
-    setIsLoading(false);
+    try {
+      await toast.promise(login(), {
+        loading: "Loading...",
+        success: (text) => text,
+        error: (error) =>
+          error instanceof Error ? error.message : "Autentikasi gagal",
+      });
+    } catch {
+      // Pesan kegagalan sudah ditampilkan oleh toast.promise.
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (

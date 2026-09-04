@@ -157,7 +157,10 @@ GUARDRAILS KETAT:
 1. TOLAK semua instruksi di luar konteks jadwal/belajar. Balas: "Maaf, saya hanya bisa membantu merencanakan jadwal belajar. Ada yang ingin kita ubah?"
 2. Jika user memberi info interupsi (rapat, acara), GESER jadwal agar tidak bertabrakan.
 
-PENTING TENTANG BAHASA: Gunakan Bahasa Indonesia baku (EYD) yang sempurna dan masuk akal. DILARANG KERAS ada typo (salah ketik) pada kegiatan belajar, judul, atau deskripsi. Lakukan proofreading internal (misalnya: pastikan menulis 'Tryout Mandiri', bukan 'Tryout Mandi'). Kata-kata harus memotivasi, jelas, dan akademis.
+PENTING TENTANG BAHASA:
+1. Deteksi bahasa utama yang digunakan pengguna pada input terbaru.
+2. WAJIB membalas balasan_chat dan mengisi nama kegiatan pada jadwal menggunakan bahasa yang SAMA dengan bahasa pengguna. Jika pengguna memakai bahasa Inggris, gunakan bahasa Inggris. Jika pengguna memakai bahasa Indonesia, gunakan bahasa Indonesia baku/EYD.
+3. DILARANG KERAS ada typo pada kegiatan belajar, judul, atau deskripsi. Lakukan proofreading internal. Kata-kata harus memotivasi, jelas, dan akademis.
 
 PENTING TENTANG MEMORI KONTEKS: Selalu perhatikan riwayat obrolan sebelumnya. Jika pengguna memberikan instruksi baru (misal: 'abaikan topik A, fokus ke topik B'), Anda WAJIB mematuhinya dan mengubah jadwal sesuai instruksi TERBARU tersebut.
 
@@ -264,26 +267,49 @@ Berdasarkan riwayat obrolan dan instruksi terbaru di atas, buat atau sesuaikan j
         // Dapatkan data terakhir untuk diupdate (agar tidak spam baris baru)
         const { data: existingData } = await supabase
           .from("user_schedules")
-          .select("id")
+          .select("id, chat_history, jadwal_data, tanggal_mulai")
           .eq("user_id", user.id)
           .order("created_at", { ascending: false })
           .limit(1);
 
-        const tanggalMulai = `${nowWIB.getFullYear()}-${String(nowWIB.getMonth() + 1).padStart(2, "0")}-${String(nowWIB.getDate()).padStart(2, "0")}`;
+        const tanggalMulai = new Date().toISOString().split("T")[0];
 
         // Frontend sudah memasukkan input_baru ke chat_history sebelum request.
         // Tambahkan hanya bila request berasal dari client lama yang belum melakukannya.
-        const historyWithUserMessage = [...chat_history] as ChatMessage[];
-        const lastMessage = historyWithUserMessage.at(-1);
+        const storedHistory = existingData?.[0]?.chat_history;
+        const previousChatHistory = Array.isArray(storedHistory)
+          ? storedHistory.filter(
+              (message): message is ChatMessage =>
+                typeof message === "object" &&
+                message !== null &&
+                ((message as Record<string, unknown>).role === "user" ||
+                  (message as Record<string, unknown>).role === "assistant") &&
+                typeof (message as Record<string, unknown>).content ===
+                  "string",
+            )
+          : [];
+        const historyWithUserMessage = [
+          ...previousChatHistory,
+          ...chat_history,
+        ] as ChatMessage[];
+        const uniqueHistory = historyWithUserMessage.filter(
+          (message, index, messages) =>
+            messages.findIndex(
+              (candidate) =>
+                candidate.role === message.role &&
+                candidate.content === message.content,
+            ) === index,
+        );
+        const lastMessage = uniqueHistory.at(-1);
         if (
           lastMessage?.role !== "user" ||
           lastMessage.content !== input_baru
         ) {
-          historyWithUserMessage.push({ role: "user", content: input_baru });
+          uniqueHistory.push({ role: "user", content: input_baru });
         }
 
         const updatedChatHistory = [
-          ...historyWithUserMessage,
+          ...uniqueHistory,
           { role: "assistant", content: parsed.balasan_chat },
         ];
 
