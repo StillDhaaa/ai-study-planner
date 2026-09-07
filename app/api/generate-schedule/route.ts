@@ -3,11 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 const AI_MODELS = [
+  "gemini-3.7-flash",
+  "gemini-3.6-flash",
   "gemini-3.5-flash",
   "gemini-3.5-flash-lite",
-  "gemini-3.6-flash",
   "gemini-3.8-flash",
-  "gemini-3.7-flash",
   "gemini-2.5-flash",
 ];
 
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
         );
 
       try {
-        sendProgress("Membaca instruksi dan riwayat chat...");
+        sendProgress("Menganalisis pesan dan konteks obrolan...");
 
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) {
@@ -154,8 +154,9 @@ export async function POST(request: NextRequest) {
 
 TUGAS UTAMA: HANYA membuat dan menyesuaikan jadwal belajar harian.
 GUARDRAILS KETAT:
-1. TOLAK semua instruksi di luar konteks jadwal/belajar. Balas: "Maaf, saya hanya bisa membantu merencanakan jadwal belajar. Ada yang ingin kita ubah?"
+1. PENOLAKAN KONTEKS: TOLAK semua instruksi di luar konteks belajar atau jadwal, misalnya pertanyaan tentang cara memperbaiki AC. Balas dengan sopan di balasan_chat dan WAJIB mengembalikan "jadwal_harian": {}. Jangan membuat, mengarang, atau mengubah jadwal untuk permintaan yang ditolak.
 2. Jika user memberi info interupsi (rapat, acara), GESER jadwal agar tidak bertabrakan.
+3. KONFLIK DURASI: Durasi target mutlak dari sistem saat ini adalah ${durasi} hari. Jika pengguna secara eksplisit meminta durasi berbeda di chat, tetap buat jadwal sebanyak ${durasi} hari. Tambahkan teguran halus di akhir balasan_chat: "Durasi target yang Anda pilih di menu adalah ${durasi} hari. Silakan ubah pengaturan durasi di atas jika ingin jadwal untuk durasi lain."
 
 PENTING TENTANG BAHASA:
 1. Deteksi bahasa utama yang digunakan pengguna pada input terbaru.
@@ -219,7 +220,7 @@ Berdasarkan riwayat obrolan dan instruksi terbaru di atas, buat atau sesuaikan j
         for (const modelName of AI_MODELS) {
           try {
             const model = genAI.getGenerativeModel({ model: modelName });
-            sendProgress("Sedang menyusun jadwal belajar...");
+            sendProgress("AI sedang memproses permintaanmu...");
             const result = await model.generateContent({
               systemInstruction: SYSTEM_PROMPT,
               contents: [
@@ -242,8 +243,7 @@ Berdasarkan riwayat obrolan dan instruksi terbaru di atas, buat atau sesuaikan j
             if (
               !candidate.balasan_chat ||
               typeof candidate.jadwal_harian !== "object" ||
-              candidate.jadwal_harian === null ||
-              Object.keys(candidate.jadwal_harian).length === 0
+              candidate.jadwal_harian === null
             ) {
               throw new Error("Struktur JSON response tidak sesuai");
             }
@@ -262,17 +262,17 @@ Berdasarkan riwayat obrolan dan instruksi terbaru di atas, buat atau sesuaikan j
           throw new Error("Semua server AI penuh, coba lagi nanti");
         }
 
-        sendProgress("Menyimpan jadwal ke Supabase...");
+        sendProgress("Menyinkronkan data...");
 
-        // Dapatkan data terakhir untuk diupdate (agar tidak spam baris baru)
+        // 1 user = 1 baris: ambil semua baris user, update yang paling lama, hapus sisanya.
         const { data: existingData } = await supabase
           .from("user_schedules")
-          .select("id, chat_history, jadwal_data, tanggal_mulai")
+          .select("id, chat_history")
           .eq("user_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(1);
+          .order("created_at", { ascending: true });
 
-        const tanggalMulai = new Date().toISOString().split("T")[0];
+        const todayWIB = `${nowWIB.getFullYear()}-${String(nowWIB.getMonth() + 1).padStart(2, "0")}-${String(nowWIB.getDate()).padStart(2, "0")}`;
+        const tujuan_belajar = input_baru.slice(0, 100);
 
         // Frontend sudah memasukkan input_baru ke chat_history sebelum request.
         // Tambahkan hanya bila request berasal dari client lama yang belum melakukannya.
@@ -313,28 +313,57 @@ Berdasarkan riwayat obrolan dan instruksi terbaru di atas, buat atau sesuaikan j
           { role: "assistant", content: parsed.balasan_chat },
         ];
 
+        const isJadwalKosong =
+          !parsed.jadwal_harian ||
+          Object.keys(parsed.jadwal_harian).length === 0;
+
         let dbError;
         if (existingData && existingData.length > 0) {
-          const { error } = await supabase
-            .from("user_schedules")
-            .update({
-              tujuan_belajar: input_baru.slice(0, 100),
-              jadwal_data: {
-                tanggal_mulai: tanggalMulai,
-                jadwal_harian: parsed.jadwal_harian,
-              },
-              chat_history: updatedChatHistory,
-            })
-            .eq("id", existingData[0].id);
-          dbError = error;
+          // JIKA DATA SUDAH ADA: SELALU UPDATE BARIS TERSEBUT
+          if (isJadwalKosong) {
+            // AI menolak: Update HANYA chat_history agar jadwal lama tidak rusak
+            const { error } = await supabase
+              .from("user_schedules")
+              .update({ chat_history: updatedChatHistory })
+              .eq("id", existingData[0].id);
+            dbError = error;
+          } else {
+            // AI memberi jadwal: Update SEMUANYA
+            const { error } = await supabase
+              .from("user_schedules")
+              .update({
+                tujuan_belajar,
+                jadwal_data: {
+                  tanggal_mulai: todayWIB,
+                  jadwal_harian: parsed.jadwal_harian,
+                },
+                chat_history: updatedChatHistory,
+              })
+              .eq("id", existingData[0].id);
+            dbError = error;
+          }
+
+          if (!dbError && existingData.length > 1) {
+            const extraIds = existingData.slice(1).map((row) => row.id);
+            const { error: cleanupError } = await supabase
+              .from("user_schedules")
+              .delete()
+              .in("id", extraIds);
+            if (cleanupError) {
+              console.error("Gagal merapikan baris duplikat:", cleanupError);
+            }
+          }
         } else {
+          // JIKA DATA KOSONG (USER BARU): BARU LAKUKAN INSERT
           const { error } = await supabase.from("user_schedules").insert({
             user_id: user.id,
-            tujuan_belajar: input_baru.slice(0, 100),
-            jadwal_data: {
-              tanggal_mulai: tanggalMulai,
-              jadwal_harian: parsed.jadwal_harian,
-            },
+            tujuan_belajar,
+            jadwal_data: isJadwalKosong
+              ? {}
+              : {
+                  tanggal_mulai: todayWIB,
+                  jadwal_harian: parsed.jadwal_harian,
+                },
             chat_history: updatedChatHistory,
           });
           dbError = error;

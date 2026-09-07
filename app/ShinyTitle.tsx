@@ -7,7 +7,7 @@ function ShinyTitle() {
     <ShinyText
       text="AI Study Planner"
       speed={7}
-      delay={0}
+      delay={2}
       color="#006fe6"
       shineColor="#ffffff"
       spread={120}

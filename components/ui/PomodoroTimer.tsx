@@ -14,13 +14,19 @@ export function PomodoroTimer({
   schedule = [],
   realCurrentDay = "hari_1",
   activeDay = "hari_1",
+  tanggalMulai,
 }: {
   schedule?: ScheduleItem[];
   realCurrentDay?: string;
   activeDay?: string;
+  tanggalMulai?: string;
 }) {
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const notifiedRef = useRef<Set<string>>(new Set());
+  const todayDate = new Date().toISOString().split("T")[0];
+  const scheduleDate = tanggalMulai?.slice(0, 10);
+  const isScheduleToday = scheduleDate === todayDate;
+  const isSchedulePast = Boolean(scheduleDate && scheduleDate < todayDate);
 
   useEffect(() => {
     if ("Notification" in window && Notification.permission === "default") {
@@ -40,7 +46,12 @@ export function PomodoroTimer({
   }, []);
 
   useEffect(() => {
-    if (!currentTime || !schedule.length || activeDay !== realCurrentDay) {
+    if (
+      !currentTime ||
+      !schedule.length ||
+      !isScheduleToday ||
+      activeDay !== realCurrentDay
+    ) {
       return;
     }
 
@@ -73,7 +84,7 @@ export function PomodoroTimer({
       });
       toast.success(message);
     }
-  }, [activeDay, currentTime, realCurrentDay, schedule]);
+  }, [activeDay, currentTime, isScheduleToday, realCurrentDay, schedule]);
 
   // Placeholder saat hydrating
   if (!currentTime) {
@@ -102,6 +113,24 @@ export function PomodoroTimer({
         </span>
         <p className="text-foreground/70 text-sm">
           Belum ada jadwal untuk hari ini
+        </p>
+      </div>
+    );
+  }
+
+  if (!isScheduleToday) {
+    return (
+      <div className="border-foreground/20 mx-auto flex w-full max-w-sm flex-col items-center justify-center gap-4 rounded-[2rem] border-2 bg-white/5 px-6 py-12 text-center shadow-lg backdrop-blur-md">
+        <p className="text-foreground/60 text-xs font-semibold tracking-widest uppercase">
+          📅 Jadwal
+        </p>
+        <span className="text-foreground text-6xl font-bold tabular-nums">
+          --:--
+        </span>
+        <p className="text-foreground/70 text-sm">
+          {isSchedulePast
+            ? "Jadwal ini sudah berlalu."
+            : "Timer aktif saat tanggal jadwal tiba."}
         </p>
       </div>
     );

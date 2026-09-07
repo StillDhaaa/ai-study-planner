@@ -9,7 +9,7 @@ import ShinyTitle from "./ShinyTitle";
 export default function Home() {
   return (
     <div className="relative flex-1 overflow-hidden">
-      <main className="relative z-10 flex min-h-dvh flex-1 flex-col items-center justify-center gap-5 px-4 pt-4 pb-16">
+      <main className="relative z-10 flex h-svh flex-1 flex-col items-center justify-center gap-5 px-4 pt-4 pb-16">
         <GlassCard className="w-full max-w-xl text-center">
           <div className="mx-auto flex flex-col items-center gap-2">
             <ShinyTitle />

@@ -3,7 +3,7 @@
 import { FormEvent, useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { TrashIcon } from "lucide-react";
+import { ArrowLeft, TrashIcon } from "lucide-react";
 
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/button";
@@ -66,16 +66,22 @@ export default function ChatPomodoroPage({
   const [inputValue, setInputValue] = useState("");
   const [jadwal, setJadwal] =
     useState<Record<string, ScheduleItem[]>>(initialJadwal);
+  const [scheduleVersion, setScheduleVersion] = useState(0);
   const [activeDay, setActiveDay] = useState("hari_1");
   const [isLoading, setIsLoading] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showResetDialog, setShowResetDialog] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   // Auto-scroll chat to bottom
   const chatEndRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatHistory]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     window.scrollTo(0, 0); // Memaksa scroll tetap di paling atas saat pertama kali render
@@ -134,16 +140,16 @@ export default function ChatPomodoroPage({
         .from("user_schedules")
         .delete()
         .eq("user_id", user.id);
-      console.log(user.id);
 
       if (error) {
         throw new Error(error.message);
       }
 
-      // Bersihkan state di UI
+      // Bersihkan state di UI (chat, jadwal, timer)
       setChatHistory([]);
       setJadwal({});
       setActiveDay("hari_1");
+      setScheduleVersion((version) => version + 1);
       setInputValue("");
       setShowResetDialog(false);
 
@@ -168,6 +174,12 @@ export default function ChatPomodoroPage({
 
     setIsLoading(true);
     const toastId = toast.loading("Memulai proses...");
+    const loadingTimeout = window.setTimeout(() => {
+      toast.loading(
+        "AI sedang memproses permintaanmu, mohon tunggu sebentar ya...",
+        { id: toastId },
+      );
+    }, 12000);
 
     try {
       const res = await fetch("/api/generate-schedule", {
@@ -221,7 +233,7 @@ export default function ChatPomodoroPage({
             if (parsed.status === "progress") {
               toast.loading(parsed.message, { id: toastId });
             } else if (parsed.status === "success") {
-              toast.success("Jadwal berhasil dibuat!", { id: toastId });
+              toast.success("Permintaan berhasil diproses!", { id: toastId });
               finalData = parsed.data;
             } else if (parsed.status === "error") {
               hadStreamError = true;
@@ -259,8 +271,12 @@ export default function ChatPomodoroPage({
           ...prev,
           { role: "assistant", content: finalData.balasan_chat },
         ]);
-        setJadwal(finalData.jadwal_harian);
-        setActiveDay("hari_1");
+        const hasNewSchedule = Object.keys(finalData.jadwal_harian).length > 0;
+        if (hasNewSchedule) {
+          setJadwal(finalData.jadwal_harian);
+          setActiveDay("hari_1");
+          setScheduleVersion((version) => version + 1);
+        }
       } else {
         setChatHistory((prev) => prev.slice(0, -1));
         if (!hadStreamError) {
@@ -274,6 +290,7 @@ export default function ChatPomodoroPage({
       );
       setChatHistory((prev) => prev.slice(0, -1));
     } finally {
+      window.clearTimeout(loadingTimeout);
       setIsLoading(false);
     }
   }
@@ -281,23 +298,31 @@ export default function ChatPomodoroPage({
   return (
     <main className="text-foreground z-2 min-h-screen p-6 transition-colors duration-300 md:p-8">
       {/* Header */}
-      <div className="mb-6 flex items-start justify-between gap-4">
+      <div className="-mt-2 flex w-full items-center justify-center">
+        <Link href="/" className="absolute top-7 left-9 max-md:hidden">
+          <Button variant="outline" className="gap-2">
+            <ArrowLeft className="size-4" />
+            Kembali ke Beranda
+          </Button>
+        </Link>
+        <Link href={"/"}>
+          <ShinyText
+            text="AI Study Planner"
+            speed={5}
+            delay={4}
+            color="#1a88ff"
+            shineColor="#ffffff"
+            spread={120}
+            direction="left"
+            yoyo={false}
+            pauseOnHover={false}
+            disabled={false}
+            className="text-2xl font-black"
+          />
+        </Link>
+      </div>
+      <div className="mt-4 mb-6 flex items-start justify-between gap-4">
         <div>
-          <Link href={"/"}>
-            <ShinyText
-              text="AI Study Planner"
-              speed={2}
-              delay={1}
-              color="#1a88ff"
-              shineColor="#ffffff"
-              spread={120}
-              direction="left"
-              yoyo={false}
-              pauseOnHover={false}
-              disabled={false}
-              className="text-xl font-black"
-            />
-          </Link>
           <h1 className="text-3xl font-bold md:text-4xl">
             Semangat belajar, {displayName}! 🔥
           </h1>
@@ -356,7 +381,7 @@ export default function ChatPomodoroPage({
                 variant="ghost"
                 size="icon"
                 onClick={() => setShowResetDialog(true)}
-                disabled={isLoading || Object.keys(jadwal).length === 0}
+                disabled={isLoading || !chatHistory || chatHistory.length === 0}
                 className="text-destructive border-muted-foreground hover:bg-destructive/10 hover:text-destructive h-8 w-8 border"
               >
                 <TrashIcon className="h-4 w-4" />
@@ -451,12 +476,18 @@ export default function ChatPomodoroPage({
             </div>
           )}
 
-          {/* Pomodoro Timer */}
-          {activeDay === realCurrentDay ? (
+          {/* Pomodoro Timer — tunggu mount agar tanggal klien tidak mismatch dengan SSR */}
+          {!mounted ? (
+            <div className="text-muted-foreground flex min-h-50 flex-col items-center justify-center py-10 text-center">
+              <p className="text-sm font-semibold">📅 Jadwal</p>
+            </div>
+          ) : activeDay === realCurrentDay ? (
             <PomodoroTimer
+              key={scheduleVersion}
               schedule={jadwal[activeDay]}
               realCurrentDay={realCurrentDay}
               activeDay={activeDay}
+              tanggalMulai={tanggalMulai}
             />
           ) : (
             <div className="text-muted-foreground flex min-h-50 flex-col items-center justify-center py-10 text-center">
