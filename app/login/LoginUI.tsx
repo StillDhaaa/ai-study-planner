@@ -91,6 +91,7 @@ function LoginUI({ user }: LoginProps) {
         if (error) {
           throw new Error(error.message);
         } else {
+          toast.dismiss("auth-error-toast");
           const displayNameToSave =
             data.user?.user_metadata?.display_name ||
             displayName ||
@@ -109,7 +110,9 @@ function LoginUI({ user }: LoginProps) {
             );
           }
 
-          router.replace("/belajar");
+          window.setTimeout(() => {
+            window.location.replace("/belajar");
+          }, 1500);
           return `Akun berhasil dibuat, selamat datang ${displayNameToSave}!`;
         }
       } else {
@@ -120,6 +123,7 @@ function LoginUI({ user }: LoginProps) {
         if (error) {
           throw new Error(error.message);
         } else {
+          toast.dismiss("auth-error-toast");
           const displayNameToSave =
             data.user?.user_metadata?.display_name || email.split("@")[0];
 
@@ -135,7 +139,9 @@ function LoginUI({ user }: LoginProps) {
             );
           }
 
-          router.replace("/belajar");
+          window.setTimeout(() => {
+            window.location.replace("/belajar");
+          }, 1500);
           return `Selamat datang kembali ${displayNameToSave}!`;
         }
       }

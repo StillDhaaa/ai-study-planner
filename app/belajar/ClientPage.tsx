@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, TrashIcon } from "lucide-react";
 
@@ -59,7 +58,6 @@ export default function ChatPomodoroPage({
   initialChatHistory,
   tanggalMulai,
 }: ClientPageProps) {
-  const router = useRouter();
   const [durasi, setDurasi] = useState("1");
   const [chatHistory, setChatHistory] =
     useState<ChatMessage[]>(initialChatHistory);
@@ -114,7 +112,7 @@ export default function ChatPomodoroPage({
       // Hapus cookie displayname
       document.cookie =
         "displayname=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-      router.push("/login");
+      window.location.replace("/login");
     } catch {
       toast.error("Gagal logout, coba lagi.");
       setIsLoggingOut(false);
