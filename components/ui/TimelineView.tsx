@@ -13,7 +13,7 @@ type TimelineProps = {
 export function TimelineView({ items }: TimelineProps) {
   if (items.length === 0) {
     return (
-      <div className="border-forefrom-foreground/20 from-foreground/10 to-forefrom-foreground/5 flex flex-col items-center justify-center rounded-2xl border bg-linear-to-br p-8 backdrop-blur-xl">
+      <div className="border-foreground/20 from-foreground/10 to-foreground/5 flex flex-col items-center justify-center rounded-2xl border bg-linear-to-br p-8 backdrop-blur-xl">
         <p className="text-muted-foreground text-center text-sm">
           Belum ada jadwal. Mulai percakapan dengan AI untuk membuat jadwal
           belajar Anda.
@@ -55,7 +55,7 @@ function TimelineItem({
               ? "border-primary bg-primary/30"
               : isBreak
                 ? "border-amber-500 bg-amber-500/30"
-                : "border-forefrom-foreground/30 bg-forefrom-foreground/5"
+                : "border-foreground/30 bg-foreground/5"
           }`}
         />
         {!isLastItem && (

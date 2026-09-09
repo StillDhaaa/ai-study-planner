@@ -23,8 +23,24 @@ export function PomodoroTimer({
 }) {
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const notifiedRef = useRef<Set<string>>(new Set());
-  const todayDate = new Date().toISOString().split("T")[0];
-  const scheduleDate = tanggalMulai?.slice(0, 10);
+  const formatLocalDate = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const todayDate = formatLocalDate(new Date());
+  const dayNumber = Number(activeDay.replace("hari_", "")) || 1;
+  const scheduleStartDate = tanggalMulai?.slice(0, 10);
+  const scheduleDate = scheduleStartDate
+    ? (() => {
+        const [year, month, day] = scheduleStartDate.split("-").map(Number);
+        const targetDate = new Date(year, month - 1, day);
+        targetDate.setDate(targetDate.getDate() + dayNumber - 1);
+        return formatLocalDate(targetDate);
+      })()
+    : undefined;
   const isScheduleToday = scheduleDate === todayDate;
   const isSchedulePast = Boolean(scheduleDate && scheduleDate < todayDate);
 

@@ -71,18 +71,20 @@ export default function ChatPomodoroPage({
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  // Auto-scroll chat to bottom
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  // Auto-scroll hanya pada container chat, bukan seluruh halaman.
+  const chatContainerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const chatContainer = chatContainerRef.current;
+    if (!chatContainer) return;
+
+    chatContainer.scrollTo({
+      top: chatContainer.scrollHeight,
+      behavior: "smooth",
+    });
   }, [chatHistory]);
 
   useEffect(() => {
     setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    window.scrollTo(0, 0); // Memaksa scroll tetap di paling atas saat pertama kali render
   }, []);
 
   // Request notification permission on mount
@@ -387,7 +389,10 @@ export default function ChatPomodoroPage({
             </div>
 
             {/* Chat messages */}
-            <div className="flex flex-1 flex-col justify-start gap-4 overflow-y-auto pr-2">
+            <div
+              ref={chatContainerRef}
+              className="flex flex-1 flex-col justify-start gap-4 overflow-y-auto pr-2"
+            >
               {chatHistory.length === 0 ? (
                 <div className="flex h-full items-center justify-center text-center">
                   <div>
@@ -415,7 +420,6 @@ export default function ChatPomodoroPage({
                   </div>
                 ))
               )}
-              <div ref={chatEndRef} />
             </div>
 
             {/* Chat input */}

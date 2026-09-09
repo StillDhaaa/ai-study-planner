@@ -87,7 +87,6 @@ function LoginUI({ user }: LoginProps) {
             },
           },
         });
-        console.log(data);
         if (error) {
           throw new Error(error.message);
         } else {
@@ -173,8 +172,8 @@ function LoginUI({ user }: LoginProps) {
           </h1>
           <p className="text-muted-foreground mt-2 text-sm">
             {isSignup
-              ? "Buat akun untuk mulai menyusun ritme belajarmu."
-              : "Masuk untuk melanjutkan rencana belajarmu."}
+              ? "Buat akun baru untuk mulai menyusun ritme belajarmu. Sudah punya akun? Gunakan tautan Masuk di bawah."
+              : "Masuk untuk melanjutkan rencana belajarmu. Belum punya akun? Gunakan tautan Daftar di bawah."}
           </p>
         </div>
 
